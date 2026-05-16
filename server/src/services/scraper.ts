@@ -12,7 +12,7 @@ const UA =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
 
 /**
- * 多源聚合搜索 — 8 个信息源并行采集
+ * 多源聚合搜索 — 稳定源优先
  */
 export async function scrapeSearch(keyword: string): Promise<ScrapedItem[]> {
   const items: ScrapedItem[] = [];
@@ -20,12 +20,10 @@ export async function scrapeSearch(keyword: string): Promise<ScrapedItem[]> {
   const engines = [
     { name: "bing",       fn: () => scrapeBing(keyword) },
     { name: "bing-news",  fn: () => scrapeBingNews(keyword) },
-    { name: "google",     fn: () => scrapeGoogle(keyword) },
-    { name: "duckduckgo", fn: () => scrapeDuckDuckGo(keyword) },
     { name: "hackernews", fn: () => scrapeHackerNews(keyword) },
-    { name: "sogou",      fn: () => scrapeSogou(keyword) },
+    { name: "reddit",     fn: () => scrapeReddit(keyword) },
+    { name: "google-news", fn: () => scrapeGoogleNewsRSS(keyword) },
     { name: "bilibili",   fn: () => scrapeBilibili(keyword) },
-    { name: "weibo",      fn: () => scrapeWeibo(keyword) },
   ];
 
   for (const engine of engines) {
@@ -67,55 +65,15 @@ async function scrapeBingNews(query: string): Promise<ScrapedItem[]> {
   });
   const $ = cheerio.load(res.data);
   const results: ScrapedItem[] = [];
-  $("div.news-card, article, .newsitem, a[href^='http']").each((_, el) => {
-    const title = $(el).find("a.title, .title, h3 a").text().trim() || $(el).text().trim();
+  $("div.news-card, article, .newsitem").each((_, el) => {
+    const title = $(el).find("a.title, .title, h3 a").text().trim();
     const snippet = $(el).find(".snippet, .description").text().trim();
-    const href = $(el).find("a.title, .title, h3 a").attr("href") || $(el).attr("href");
+    const href = $(el).find("a.title, .title, h3 a").attr("href");
     if (title && href && title.length > 10 && title.length < 200) {
       results.push({ title, snippet, url: href, source: "bing-news" });
     }
   });
   return results.slice(0, 10);
-}
-
-// ─── Google ───────────────────────────────────────────
-
-async function scrapeGoogle(query: string): Promise<ScrapedItem[]> {
-  const url = `https://www.google.com/search?q=${encodeURIComponent(query)}&tbs=qdr:w&hl=zh-CN&num=10`;
-  const res = await axios.get(url, {
-    headers: { "User-Agent": UA, "Accept-Language": "zh-CN,zh;q=0.9" },
-    timeout: 12000,
-  });
-  const $ = cheerio.load(res.data);
-  const results: ScrapedItem[] = [];
-  $("div.g, div[data-sokoban-container]").each((_, el) => {
-    const title = $(el).find("h3").text().trim();
-    const snippet = $(el).find("div[data-sncf], span.aCOpRe, div.VwiC3b").text().trim();
-    const href = $(el).find("a[href^='http']").first().attr("href");
-    if (title && href && href.startsWith("http")) {
-      results.push({ title, snippet, url: href, source: "google" });
-    }
-  });
-  return results.slice(0, 10);
-}
-
-// ─── DuckDuckGo ───────────────────────────────────────
-
-async function scrapeDuckDuckGo(query: string): Promise<ScrapedItem[]> {
-  const url = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`;
-  const res = await axios.get(url, {
-    headers: { "User-Agent": UA },
-    timeout: 10000,
-  });
-  const $ = cheerio.load(res.data);
-  const results: ScrapedItem[] = [];
-  $(".result").each((_, el) => {
-    const title = $(el).find(".result__title a, .result__a").text().trim();
-    const snippet = $(el).find(".result__snippet").text().trim();
-    const href = $(el).find(".result__title a, .result__a").attr("href");
-    if (title && href) results.push({ title, snippet, url: href, source: "duckduckgo" });
-  });
-  return results;
 }
 
 // ─── Hacker News (Algolia API) ────────────────────────
@@ -126,101 +84,108 @@ async function scrapeHackerNews(query: string): Promise<ScrapedItem[]> {
   const hits = res.data?.hits || [];
   return hits.map((h: any) => ({
     title: h.title || "",
-    snippet: h.story_text || h.comment_text || `HN | ${h.points} points | ${h.num_comments} comments`,
+    snippet: `${h.points || 0} points · ${h.num_comments || 0} comments`,
     url: h.url || `https://news.ycombinator.com/item?id=${h.objectID}`,
     source: "hackernews",
   }));
 }
 
-// ─── 搜狗 ─────────────────────────────────────────────
+// ─── Reddit ───────────────────────────────────────────
 
-async function scrapeSogou(query: string): Promise<ScrapedItem[]> {
-  const url = `https://www.sogou.com/web?query=${encodeURIComponent(query)}`;
-  const res = await axios.get(url, {
-    headers: { "User-Agent": UA, "Accept-Language": "zh-CN,zh;q=0.9" },
-    timeout: 10000,
-  });
-  const $ = cheerio.load(res.data);
+const REDDIT_SUBS = ["MachineLearning", "artificial", "singularity"];
+
+async function scrapeReddit(keyword: string): Promise<ScrapedItem[]> {
   const results: ScrapedItem[] = [];
-  $(".results .rb, .vrwrap").each((_, el) => {
-    const title = $(el).find("h3 a, .vr-title").text().trim();
-    const snippet = $(el).find(".str-text, .star-wiki, .space-txt").text().trim();
-    const href = $(el).find("h3 a, .vr-title").attr("href");
-    if (title && href) results.push({ title, snippet, url: href, source: "sogou" });
-  });
-  return results.slice(0, 10);
+  const query = keyword.toLowerCase();
+
+  for (const sub of REDDIT_SUBS) {
+    try {
+      const url = `https://www.reddit.com/r/${sub}/search.json?q=${encodeURIComponent(keyword)}&sort=new&limit=10&restrict_sr=on`;
+      const res = await axios.get(url, {
+        headers: { "User-Agent": `${UA} (by /u/hotmonitor)` },
+        timeout: 10000,
+      });
+      const posts = res.data?.data?.children || [];
+      for (const p of posts) {
+        const d = p.data;
+        if (!d.title) continue;
+
+        // 按关键词简单匹配
+        const titleLower = d.title.toLowerCase();
+        const selftext = (d.selftext || "").toLowerCase();
+        if (!titleLower.includes(query) && !selftext.includes(query)) continue;
+
+        results.push({
+          title: d.title,
+          snippet: `r/${d.subreddit} · ${d.score} upvotes · ${d.num_comments} comments`,
+          url: `https://www.reddit.com${d.permalink}`,
+          source: "reddit",
+        });
+      }
+    } catch {
+      // 静默跳过
+    }
+  }
+
+  return results.slice(0, 15);
+}
+
+// ─── Google News RSS ──────────────────────────────────
+
+async function scrapeGoogleNewsRSS(keyword: string): Promise<ScrapedItem[]> {
+  try {
+    const url = `https://news.google.com/rss/search?q=${encodeURIComponent(keyword)}&hl=zh-CN&gl=CN&ceid=CN:zh-Hans`;
+    const res = await axios.get(url, {
+      headers: { "User-Agent": UA },
+      timeout: 10000,
+    });
+    const $ = cheerio.load(res.data, { xmlMode: true });
+    const results: ScrapedItem[] = [];
+
+    $("item").each((_, el) => {
+      const title = $(el).find("title").text().trim();
+      const link = $(el).find("link").text().trim();
+      const description = $(el).find("description").text().trim();
+      const source = $(el).find("source").text().trim();
+
+      // 提取纯文本（去掉 HTML）
+      const plainText = description.replace(/<[^>]+>/g, "").slice(0, 200);
+
+      if (title && link) {
+        results.push({
+          title,
+          snippet: source ? `${source} · ${plainText}` : plainText,
+          url: link,
+          source: "google-news",
+        });
+      }
+    });
+
+    return results.slice(0, 15);
+  } catch {
+    return [];
+  }
 }
 
 // ─── B站 (Bilibili) ───────────────────────────────────
 
 async function scrapeBilibili(keyword: string): Promise<ScrapedItem[]> {
-  const url = `https://api.bilibili.com/x/web-interface/search/type?search_type=video&keyword=${encodeURIComponent(keyword)}&page=1`;
-  const res = await axios.get(url, {
-    headers: {
-      "User-Agent": UA,
-      Referer: "https://www.bilibili.com/",
-    },
-    timeout: 10000,
-  });
-  const list = res.data?.data?.result || [];
-  return list.slice(0, 10).map((v: any) => ({
-    title: v.title?.replace(/<[^>]+>/g, "") || "",
-    snippet: `${v.author || ""} · 播放 ${v.play || 0}`,
-    url: `https://www.bilibili.com/video/${v.bvid || v.aid}`,
-    source: "bilibili",
-  }));
-}
-
-// ─── 微博 ────────────────────────────────────────────
-
-async function scrapeWeibo(keyword: string): Promise<ScrapedItem[]> {
-  const results: ScrapedItem[] = [];
-
-  // 1. 微博搜索
   try {
-    const url = `https://s.weibo.com/weibo?q=${encodeURIComponent(keyword)}`;
+    const url = `https://api.bilibili.com/x/web-interface/search/type?search_type=video&keyword=${encodeURIComponent(keyword)}&page=1`;
     const res = await axios.get(url, {
-      headers: { "User-Agent": UA, "Accept-Language": "zh-CN,zh;q=0.9" },
+      headers: { "User-Agent": UA, Referer: "https://www.bilibili.com/" },
       timeout: 10000,
     });
-    const $ = cheerio.load(res.data);
-    $(".card-wrap").each((_, el) => {
-      const title = $(el).find(".txt").text().trim().replace(/\s+/g, " ").slice(0, 200);
-      const href = $(el).find("a[href*='weibo.com']").attr("href");
-      if (title && href) {
-        results.push({ title, snippet: "", url: `https:${href}`, source: "weibo" });
-      }
-    });
+    const list = res.data?.data?.result || [];
+    return list.slice(0, 10).map((v: any) => ({
+      title: v.title?.replace(/<[^>]+>/g, "") || "",
+      snippet: `${v.author || ""} · 播放 ${v.play || 0}`,
+      url: `https://www.bilibili.com/video/${v.bvid || v.aid}`,
+      source: "bilibili",
+    }));
   } catch {
-    // 微博反爬严格，静默失败
+    return [];
   }
-
-  // 2. 微博热搜 — 仅当关键词属于通用 AI 范围时拉取
-  try {
-    const hotUrl = "https://s.weibo.com/top/summary";
-    const res = await axios.get(hotUrl, {
-      headers: { "User-Agent": UA, "Accept-Language": "zh-CN,zh;q=0.9" },
-      timeout: 10000,
-    });
-    const $ = cheerio.load(res.data);
-    $("#pl_top_realtimehot table tbody tr").each((_, el) => {
-      const title = $(el).find(".td-02 a").text().trim();
-      const href = $(el).find(".td-02 a").attr("href");
-      const count = $(el).find(".td-02 span").text().trim();
-      if (title && href && title.length > 1 && title.length < 100) {
-        results.push({
-          title,
-          snippet: count ? `热搜热度: ${count}` : "",
-          url: `https://s.weibo.com${href}`,
-          source: "weibo-hot",
-        });
-      }
-    });
-  } catch {
-    // 静默失败
-  }
-
-  return results.slice(0, 10);
 }
 
 // ─── 去重 ─────────────────────────────────────────────

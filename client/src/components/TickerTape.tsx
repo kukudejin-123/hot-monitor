@@ -5,35 +5,40 @@ interface TickerTapeProps {
 export function TickerTape({ topics }: TickerTapeProps) {
   if (topics.length === 0) {
     return (
-      <div className="border-b border-dark-border bg-dark-surface px-4 py-2 overflow-hidden">
-        <div className="flex items-center gap-2 text-text-secondary text-sm">
-          <span className="text-neon-cyan font-mono text-xs">● OFFLINE</span>
-          <span>等待热点数据...</span>
+      <div className="border-b border-slate-800/50 bg-slate-900/30 px-4 py-1.5">
+        <div className="flex items-center gap-2 text-slate-500 text-xs font-mono">
+          <span className="w-1.5 h-1.5 rounded-full bg-slate-600" />
+          等待数据采集...
         </div>
       </div>
     );
   }
 
-  const duplicated = [...topics, ...topics];
+  const doubled = [...topics, ...topics];
 
   return (
-    <div className="border-b border-dark-border bg-dark-surface overflow-hidden">
-      <div className="flex items-center py-2" style={{ width: "max-content" }}>
-        <div className="ticker-track flex items-center gap-8 px-4">
-          <span className="text-neon-green font-mono text-xs flex-shrink-0">● LIVE</span>
-          {duplicated.map((t, i) => (
+    <div className="border-b border-slate-800/50 bg-slate-900/20 overflow-hidden backdrop-blur-sm">
+      <div className="flex items-center py-1.5">
+        <div className="flex items-center gap-6 ticker-track px-4">
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+            <span className="text-[10px] text-emerald-400/80 font-mono tracking-wider">LIVE</span>
+          </div>
+          {doubled.map((t, i) => (
             <a
               key={`${t.id}-${i}`}
-              href="#"
-              className="flex items-center gap-2 text-sm text-text-primary hover:text-neon-cyan transition-colors flex-shrink-0 font-mono"
+              href={`#topic-${t.id}`}
               onClick={(e) => {
                 e.preventDefault();
                 document.getElementById(`topic-${t.id}`)?.scrollIntoView({ behavior: "smooth" });
               }}
+              className="flex items-center gap-2 text-xs text-slate-400 hover:text-slate-200 transition-colors flex-shrink-0 cursor-pointer"
             >
-              <span className="text-neon-purple">[{t.ai_score}/10]</span>
-              <span className="truncate max-w-[300px]">{t.title.slice(0, 60)}</span>
-              <span className="text-dark-border">|</span>
+              <span className="text-[10px] text-slate-600 font-mono tabular-nums">
+                [{t.ai_score}]
+              </span>
+              <span className="truncate max-w-[280px]">{t.title.slice(0, 70)}</span>
+              <span className="text-slate-700">·</span>
             </a>
           ))}
         </div>
