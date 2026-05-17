@@ -46,6 +46,7 @@ export async function fetchAllSources() {
             ai_score: ai.score,
             ai_reason: ai.reason,
             verified: 1,
+            engagement: { views: tweet.views, likes: tweet.likes, retweets: tweet.retweets },
           });
           if (inserted) results.verified++;
         }
@@ -70,6 +71,7 @@ export async function fetchAllSources() {
             ai_score: ai.score,
             ai_reason: ai.reason,
             verified: 1,
+            engagement: item.engagement || null,
           });
           if (inserted) results.verified++;
         }

@@ -6,6 +6,7 @@ export interface ScrapedItem {
   snippet: string;
   url: string;
   source: string;
+  engagement?: { views?: number; likes?: number; points?: number; comments?: number };
 }
 
 const UA =
@@ -87,6 +88,7 @@ async function scrapeHackerNews(query: string): Promise<ScrapedItem[]> {
     snippet: `${h.points || 0} points · ${h.num_comments || 0} comments`,
     url: h.url || `https://news.ycombinator.com/item?id=${h.objectID}`,
     source: "hackernews",
+    engagement: { points: h.points || 0, comments: h.num_comments || 0 },
   }));
 }
 
@@ -120,6 +122,7 @@ async function scrapeReddit(keyword: string): Promise<ScrapedItem[]> {
           snippet: `r/${d.subreddit} · ${d.score} upvotes · ${d.num_comments} comments`,
           url: `https://www.reddit.com${d.permalink}`,
           source: "reddit",
+          engagement: { points: d.score || 0, comments: d.num_comments || 0 },
         });
       }
     } catch {
@@ -182,6 +185,7 @@ async function scrapeBilibili(keyword: string): Promise<ScrapedItem[]> {
       snippet: `${v.author || ""} · 播放 ${v.play || 0}`,
       url: `https://www.bilibili.com/video/${v.bvid || v.aid}`,
       source: "bilibili",
+      engagement: { views: v.play || 0, comments: v.danmaku || 0 },
     }));
   } catch {
     return [];

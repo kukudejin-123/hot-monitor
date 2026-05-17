@@ -11,6 +11,7 @@ interface Topic {
   ai_reason: string;
   verified: number;
   is_new: number;
+  engagement: { views?: number; likes?: number; retweets?: number; points?: number; comments?: number } | null;
   created_at: string;
 }
 
@@ -26,6 +27,12 @@ const SOURCE_MAP: Record<string, { label: string; color: string }> = {
 
 function getSource(type: string) {
   return SOURCE_MAP[type] ?? { label: type, color: "bg-slate-500/10 text-slate-400 border-slate-500/20" };
+}
+
+function formatCount(n: number): string {
+  if (n >= 10000) return (n / 10000).toFixed(1) + "万";
+  if (n >= 1000) return (n / 1000).toFixed(1) + "k";
+  return String(n);
 }
 
 function timeAgo(dateStr: string) {
@@ -87,6 +94,37 @@ export function TopicCard({ topic }: { topic: Topic }) {
             <p className="text-xs text-slate-400 leading-relaxed mt-1 line-clamp-2">
               {topic.summary}
             </p>
+          )}
+
+          {/* Engagement stats — prominent below content */}
+          {topic.engagement && (
+            <div className="flex items-center gap-3 mt-2 flex-wrap">
+              {topic.engagement.views ? (
+                <span className="text-[11px] text-slate-300 font-mono font-medium flex items-center gap-1">
+                  <span className="text-accent-cyan">👁</span> {formatCount(topic.engagement.views)} <span className="text-slate-500 text-[9px]">阅读</span>
+                </span>
+              ) : null}
+              {topic.engagement.likes ? (
+                <span className="text-[11px] text-slate-300 font-mono font-medium flex items-center gap-1">
+                  <span className="text-rose-400">♥</span> {formatCount(topic.engagement.likes)} <span className="text-slate-500 text-[9px]">赞</span>
+                </span>
+              ) : null}
+              {topic.engagement.retweets ? (
+                <span className="text-[11px] text-slate-300 font-mono font-medium flex items-center gap-1">
+                  <span className="text-emerald-400">🔄</span> {formatCount(topic.engagement.retweets)} <span className="text-slate-500 text-[9px]">转发</span>
+                </span>
+              ) : null}
+              {topic.engagement.points ? (
+                <span className="text-[11px] text-slate-300 font-mono font-medium flex items-center gap-1">
+                  <span className="text-amber-400">▲</span> {formatCount(topic.engagement.points)} <span className="text-slate-500 text-[9px]">票</span>
+                </span>
+              ) : null}
+              {topic.engagement.comments ? (
+                <span className="text-[11px] text-slate-300 font-mono font-medium flex items-center gap-1">
+                  <span className="text-accent-blue">💬</span> {formatCount(topic.engagement.comments)} <span className="text-slate-500 text-[9px]">评</span>
+                </span>
+              ) : null}
+            </div>
           )}
         </div>
 

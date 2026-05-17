@@ -5,12 +5,14 @@ import { fetchAllSources } from "../services/scheduler.js";
 export const topicsRouter = Router();
 
 topicsRouter.get("/", (req, res) => {
-  const { page, limit, keyword_id, verified } = req.query;
+  const { page, limit, keyword_id, verified, search, source_type } = req.query;
   const result = getTopics({
     page: page ? Number(page) : undefined,
     limit: limit ? Number(limit) : undefined,
     keyword_id: keyword_id ? Number(keyword_id) : undefined,
     verified: verified !== undefined ? Number(verified) : undefined,
+    search: search ? String(search) : undefined,
+    source_type: source_type ? String(source_type) : undefined,
   });
   res.json(result);
 });

@@ -97,13 +97,23 @@ export function getTopics(opts: {
   limit?: number;
   keyword_id?: number;
   verified?: number;
+  search?: string;
+  source_type?: string;
 }) {
   const db = read();
-  const { page = 1, limit = 20, keyword_id, verified } = opts;
+  const { page = 1, limit = 20, keyword_id, verified, search, source_type } = opts;
   let list = [...db.topics];
 
   if (keyword_id !== undefined) list = list.filter((t) => t.keyword_id === keyword_id);
   if (verified !== undefined) list = list.filter((t) => t.verified === verified);
+  if (source_type) list = list.filter((t) => t.source_type === source_type);
+  if (search) {
+    const q = search.toLowerCase();
+    list = list.filter((t) =>
+      (t.title || "").toLowerCase().includes(q) ||
+      (t.summary || "").toLowerCase().includes(q)
+    );
+  }
 
   list.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
@@ -129,6 +139,7 @@ export function insertTopic(topic: {
   ai_score?: number;
   ai_reason?: string;
   verified?: number;
+  engagement?: { views?: number; likes?: number; retweets?: number; points?: number; comments?: number } | null;
 }) {
   const db = read();
   // Check duplicate by URL
@@ -147,6 +158,7 @@ export function insertTopic(topic: {
     ai_reason: topic.ai_reason || "",
     verified: topic.verified ?? 1,
     is_new: 1,
+    engagement: topic.engagement || null,
     created_at: new Date().toISOString(),
   };
   db.topics.push(t);

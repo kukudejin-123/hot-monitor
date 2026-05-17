@@ -10,9 +10,9 @@ const client = axios.create({
 });
 
 // 质量阈值
-const MIN_LIKES = 50;
-const MIN_RETWEETS = 20;
-const MIN_VIEWS = 2000;
+const MIN_LIKES = 10;
+const MIN_RETWEETS = 5;
+const MIN_VIEWS = 500;
 
 export interface Tweet {
   id: string;
@@ -20,12 +20,15 @@ export interface Tweet {
   url: string;
   author: string;
   created_at: string;
+  likes: number;
+  retweets: number;
+  views: number;
 }
 
 export async function searchTweets(query: string): Promise<Tweet[]> {
   try {
     const response = await client.get("/twitter/tweet/advanced_search", {
-      params: { query, queryType: "Latest" },
+      params: { query, queryType: "Top" },
     });
     const raw = response.data?.tweets || response.data?.data || [];
 
@@ -58,6 +61,9 @@ export async function searchTweets(query: string): Promise<Tweet[]> {
         url: t.url || (t.id ? `https://x.com/i/status/${t.id}` : ""),
         author: authorName,
         created_at: t.createdAt || t.created_at || "",
+        likes,
+        retweets: rts,
+        views,
       });
     }
 

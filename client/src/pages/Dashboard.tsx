@@ -17,8 +17,26 @@ interface Topic {
   ai_reason: string;
   verified: number;
   is_new: number;
+  engagement: { views?: number; likes?: number; retweets?: number; points?: number; comments?: number } | null;
   created_at: string;
 }
+
+interface Keyword {
+  id: number;
+  word: string;
+  active: number;
+}
+
+const SOURCES = [
+  { value: "", label: "全部来源" },
+  { value: "twitter", label: "𝕏 Twitter" },
+  { value: "bing", label: "Bing" },
+  { value: "bing-news", label: "Bing News" },
+  { value: "hackernews", label: "Hacker News" },
+  { value: "reddit", label: "Reddit" },
+  { value: "google-news", label: "Google News" },
+  { value: "bilibili", label: "B站" },
+];
 
 export function Dashboard() {
   const [topics, setTopics] = useState<Topic[]>([]);
@@ -27,24 +45,43 @@ export function Dashboard() {
   const [page, setPage] = useState(1);
   const [filter, setFilter] = useState<"all" | "verified">("all");
   const [newCount, setNewCount] = useState(0);
+  const [search, setSearch] = useState("");
+  const [sourceType, setSourceType] = useState("");
+  const [keywordId, setKeywordId] = useState("");
+  const [keywords, setKeywords] = useState<Keyword[]>([]);
 
   const loadTopics = useCallback(async () => {
     try {
       const params = new URLSearchParams({ page: String(page), limit: "20" });
       if (filter === "verified") params.set("verified", "1");
+      if (search) params.set("search", search);
+      if (sourceType) params.set("source_type", sourceType);
+      if (keywordId) params.set("keyword_id", keywordId);
       const res = await fetch(`/api/topics?${params}`);
       const data = await res.json();
       setTopics(data.topics || []);
       setTotal(data.total || 0);
       setNewCount((data.topics || []).filter((t: Topic) => t.is_new === 1).length);
     } catch (e) { console.error(e); }
-  }, [page, filter]);
+  }, [page, filter, search, sourceType, keywordId]);
 
   useEffect(() => {
     loadTopics();
     const interval = setInterval(loadTopics, 30000);
     return () => clearInterval(interval);
   }, [loadTopics]);
+
+  useEffect(() => {
+    fetch("/api/keywords").then(r => r.json()).then(setKeywords).catch(() => {});
+  }, []);
+
+  function resetFilters() {
+    setSearch("");
+    setSourceType("");
+    setKeywordId("");
+    setFilter("all");
+    setPage(1);
+  }
 
   async function manualFetch() {
     setFetching(true);
@@ -169,10 +206,46 @@ export function Dashboard() {
           {/* Center Feed */}
           <section className="min-w-0">
             {/* Mobile: compact controls */}
-            <div className="lg:hidden flex items-center justify-between mb-4 gap-2">
-              <div className="flex gap-1">
-                <button onClick={() => { setFilter("all"); setPage(1); }} className={`text-[11px] px-2.5 py-1 rounded-md font-mono ${filter === "all" ? "bg-slate-800/60 text-slate-200" : "text-slate-500"}`}>全部</button>
-                <button onClick={() => { setFilter("verified"); setPage(1); }} className={`text-[11px] px-2.5 py-1 rounded-md font-mono ${filter === "verified" ? "bg-emerald-500/10 text-emerald-400" : "text-slate-500"}`}>已验证</button>
+            <div className="lg:hidden space-y-2 mb-4">
+              <div className="relative">
+                <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+                <input
+                  type="text"
+                  placeholder="搜索..."
+                  value={search}
+                  onChange={e => { setSearch(e.target.value); setPage(1); }}
+                  className="w-full bg-slate-900/60 border border-slate-700/50 rounded-lg pl-8 pr-3 py-1.5 text-[11px] text-slate-200 placeholder:text-slate-600 outline-none focus:border-accent-blue/40 font-mono"
+                />
+              </div>
+              <div className="flex items-center gap-1.5">
+                <select
+                  value={sourceType}
+                  onChange={e => { setSourceType(e.target.value); setPage(1); }}
+                  className="bg-slate-900/60 border border-slate-700/50 rounded-md px-2 py-1 text-[10px] text-slate-300 outline-none font-mono appearance-none cursor-pointer flex-1"
+                >
+                  {SOURCES.map(s => (
+                    <option key={s.value} value={s.value}>{s.label}</option>
+                  ))}
+                </select>
+                <select
+                  value={keywordId}
+                  onChange={e => { setKeywordId(e.target.value); setPage(1); }}
+                  className="bg-slate-900/60 border border-slate-700/50 rounded-md px-2 py-1 text-[10px] text-slate-300 outline-none font-mono appearance-none cursor-pointer flex-1"
+                >
+                  <option value="">全部关键词</option>
+                  {keywords.filter(k => k.active === 1).map(k => (
+                    <option key={k.id} value={k.id}>{k.word}</option>
+                  ))}
+                </select>
+                <div className="flex gap-1">
+                  <button onClick={() => { setFilter("all"); setPage(1); }} className={`text-[10px] px-2 py-1 rounded-md font-mono ${filter === "all" ? "bg-slate-800/60 text-slate-200" : "text-slate-500"}`}>全部</button>
+                  <button onClick={() => { setFilter("verified"); setPage(1); }} className={`text-[10px] px-2 py-1 rounded-md font-mono ${filter === "verified" ? "bg-emerald-500/10 text-emerald-400" : "text-slate-500"}`}>已验证</button>
+                </div>
+                {(search || sourceType || keywordId || filter !== "all") && (
+                  <button onClick={resetFilters} className="text-[10px] px-1.5 py-1 rounded-md border border-slate-700/40 text-slate-500 font-mono">重置</button>
+                )}
               </div>
               <div className="flex items-center gap-2 text-[10px] text-slate-500">
                 <span>共{total}条</span>
@@ -188,6 +261,49 @@ export function Dashboard() {
                 <span className="text-[10px] text-slate-600 font-mono">
                   {page}/{Math.ceil(total / 20)}
                 </span>
+              )}
+            </div>
+
+            {/* Filter bar */}
+            <div className="flex flex-wrap items-center gap-2 mb-3">
+              <div className="relative flex-1 min-w-[160px]">
+                <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+                <input
+                  type="text"
+                  placeholder="搜索标题/摘要..."
+                  value={search}
+                  onChange={e => { setSearch(e.target.value); setPage(1); }}
+                  className="w-full bg-slate-900/60 border border-slate-700/50 rounded-lg pl-8 pr-3 py-1.5 text-[11px] text-slate-200 placeholder:text-slate-600 outline-none focus:border-accent-blue/40 transition-colors font-mono"
+                />
+              </div>
+              <select
+                value={sourceType}
+                onChange={e => { setSourceType(e.target.value); setPage(1); }}
+                className="bg-slate-900/60 border border-slate-700/50 rounded-lg px-2.5 py-1.5 text-[11px] text-slate-300 outline-none focus:border-accent-blue/40 transition-colors font-mono appearance-none cursor-pointer"
+              >
+                {SOURCES.map(s => (
+                  <option key={s.value} value={s.value}>{s.label}</option>
+                ))}
+              </select>
+              <select
+                value={keywordId}
+                onChange={e => { setKeywordId(e.target.value); setPage(1); }}
+                className="bg-slate-900/60 border border-slate-700/50 rounded-lg px-2.5 py-1.5 text-[11px] text-slate-300 outline-none focus:border-accent-blue/40 transition-colors font-mono appearance-none cursor-pointer max-w-[120px]"
+              >
+                <option value="">全部关键词</option>
+                {keywords.filter(k => k.active === 1).map(k => (
+                  <option key={k.id} value={k.id}>{k.word}</option>
+                ))}
+              </select>
+              {(search || sourceType || keywordId || filter !== "all") && (
+                <button
+                  onClick={resetFilters}
+                  className="text-[10px] px-2 py-1.5 rounded-lg border border-slate-700/40 text-slate-500 hover:text-slate-300 hover:border-slate-600/60 transition-colors font-mono flex-shrink-0"
+                >
+                  重置
+                </button>
               )}
             </div>
 
